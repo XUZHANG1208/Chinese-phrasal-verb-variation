@@ -41,6 +41,22 @@ PV_data<- PV_dis[rowSums(is.na(PV_dis) | PV_dis == "") < ncol(PV_dis), ] # remov
 summary(PV_data)
 ```
 
+##there are somehow always an extra level for the categorical predictors, so i need to drop the extra level
+```{r dropping level, echo=FALSE, eval=FALSE}
+PV_data$Response <- droplevels(PV_data$Response)
+#PV_data$Structural_priming<-droplevels(PV_data$Structural_priming)
+#PV_data$NP_Givenness<-droplevels(PV_data$NP_Givenness)
+PV_data$NP_Concreteness<- droplevels(PV_data$NP_Concreteness)
+PV_data$NP_Definiteness<- droplevels(PV_data$NP_Definiteness)
+PV_data$Time<- droplevels(PV_data$Time)
+PV_data$Register<- droplevels(PV_data$Register)
+PV_data$Genre<- droplevels(PV_data$Genre)
+PV_data$Imperative_conditional<- droplevels(PV_data$Imperative_conditional)
+PV_data$le<- droplevels(PV_data$le)
+PV_data$Numeric_Classifier<- droplevels(PV_data$Numeric_Classifier)
+summary(PV_data)
+```
+
 ##data overview
 ```{r data_overview, fig.cap="Figure 1: data overview", echo=TRUE, eval=TRUE, message=FALSO, warning=FALSE}
 library(base)
@@ -78,7 +94,7 @@ library(knitr)
 variables <- data.frame(
     Variable = c("Response", "NP_Length", "NP_Concreteness", "NP_Definiteness", "Time_num", "Register", "Imperative_conditional", "le", "Numeric_Classifier"),
     Type = c("response variable", "numeric", "categorical", "categorical", "numeric", "categorical", "categorical", "categorical", "categorical"),
-    Explanation = c("v_chu_n_lai vs. v_chulai_n vs. v_n_chulai", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite", "20-year intervals", "3 levels: Written, Spoken and Online", "Imperative vs. Conditional vs. No", "Absent vs. Present", "Absent vs. Present")
+    Explanation = c("v_chu_n_lai vs. v_chulai_n vs. v_n_chulai", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite", "20-year intervals", "3 levels: Written, Spoken and Online", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
 )
 
 # Render as a table
@@ -172,7 +188,14 @@ dotplot(sort(forest.varimp), xlab="Variable Importance", panel = function(x,y){
 install.packages ("nnet")
 library(nnet)
 ##modeling fitting
-# the default reference level is "V-chu-N-lai"
+
+##the default reference response is "V-chu-N-lai"
+##setting the reference level of categorical predictors using relevel() function
+PV_data$NP_Concreteness <- relevel(PV_data$NP_Concreteness, ref = "Non-concrete")
+PV_data$Imperative_conditional<-relevel(PV_data$Imperative_conditional, ref = "No")
+PV_data$le<-relevel(PV_data$le, ref="Absent")
+PV_data$NP_Definiteness<-relevel(PV_data$NP_Definiteness, ref="Indefinite")
+PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Absent")
 multinom_model <- multinom( 
   formula = Response ~ Time_num + Genre + log_NP_Length + NP_Concreteness + NP_Definiteness + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
 summary(multinom_model)
@@ -187,3 +210,66 @@ pR2(multinom_model)
 library(pROC) 
 multiclass.roc(PV_data$Response, predict(multinom_model, type="prob"))
 ```
+```{r coefficients, echo=TRUE, eval=TRUE}
+##extract tidy coefficients
+library(broom) 
+library(dplyr) 
+library(knitr)
+coef_table <- tidy(multinom_model) %>% 
+  mutate( 
+    z_value = estimate / std.error, 
+    p_value = 2 * (1 - pnorm(abs(z_value))) 
+    ) %>% 
+  select(y.level, term, estimate, std.error,z_value, p_value) 
+# Print a nice table 
+kable( 
+  coef_table, 
+  digits = 4, caption = "Multinomial Regression Coefficients with Significance" 
+  )
+```
+
+##deriving V-chulai-N vs. V-N-chulai logit
+```{r coefficnets of the third regression, echo=FALSE, eval=FALSE}
+library(dplyr) 
+library(knitr)
+## extracting coefficients and variance-covariance matrices
+coef_mat<-coef(multinom_model)
+##then identifying outcome names
+outcomes<-rownames(coef_mat)
+outcomes
+vc_mat<-vcov(multinom_model)
+## deriving the comparison of V-N-chulai (C) vs. V-chulai-N (B)
+coef_C_vs_B<-coef_mat[outcomes[2],]-coef_mat[outcomes[1],]
+###computing std.errors for the third comparison
+##### Helper function to extract block matrices from vcov 
+get_block <- function(vcov_matrix, outcome_name, coef_names) { 
+  idx <- grep(paste0("^", outcome_name, ":"), rownames(vcov_matrix)) 
+  vcov_matrix[idx, idx] 
+  }
+####extract blocks for  V-N-chulai and V-chulai-N
+block_B <- get_block(vc_mat, outcomes[1], colnames(coef_mat)) 
+block_C <- get_block(vc_mat, outcomes[2], colnames(coef_mat))
+####extract cross-variance block
+idx_B <- grep(paste0("^", outcomes[1], ":"), rownames(vc_mat)) 
+idx_C <- grep(paste0("^", outcomes[2], ":"), rownames(vc_mat)) 
+block_CB <- vc_mat[idx_C, idx_B]
+####variance of C-B
+var_C_vs_B <- block_C + block_B - 2 * block_CB 
+se_C_vs_B <- sqrt(diag(var_C_vs_B))
+####z- and p-values
+z_C_vs_B <- coef_C_vs_B / se_C_vs_B 
+p_C_vs_B <- 2 * (1 - pnorm(abs(z_C_vs_B)))
+####results:
+results_C_vs_B <- data.frame( 
+  term = names(coef_C_vs_B), 
+  estimate = coef_C_vs_B, 
+  std.error = se_C_vs_B, 
+  z.value = z_C_vs_B, 
+  p.value = p_C_vs_B )
+####printing results
+kable( 
+  results_C_vs_B, 
+  digits = 4, 
+  caption = "Derived Binary Logit: V-N-chulai (C) vs. V-chulai-N (B)" )
+```
+
