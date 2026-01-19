@@ -5,6 +5,7 @@ output:
   toc: true
   toc_depth: 2
   toc_float: true
+  number_sections: true
 date: "2026-01-12"
 ---
 # Introduction
@@ -88,7 +89,11 @@ piechart<-pie(response_counts,
 
 ## converting responses to A, B and C types
 ```{r converting response to types, echo=FALSE, eval=FALSE}
-
+PV_data$Response_recode<-factor(
+  PV_data$Response,
+  levels=c("V-N-chulai", "V-chu-N-lai", "V-chulai-N"), # A,B,C are sequenced according to the position of the NP object
+  labels=c("A","B", "C")
+)
 ```
 
 ## Variables
@@ -186,6 +191,19 @@ dotplot(sort(forest.varimp), xlab="Variable Importance", panel = function(x,y){
 ) 
 ```
 
+##Making variable importance more interpretable
+Since log_NP_length dominates the importance ranking to a great degree, the tree is severally compressed leaving the other predictors marginal and their importance non-interpretable. To better understand the importance of the other variables, we plot the importance without NP_length.
+```{r Importance ranking without NP_length, echo=TRUE, eval=TRUE}
+top_var<-names(which.max(forest.varimp))
+imp_others<-forest.varimp[ names(forest.varimp) !=top_var ]
+dotplot(sort(imp_others), xlab="Variable Importance (without NP_length)", panel = function(x,y){
+  panel.dotplot(x, y, col='darkblue', pch=16, cex=1.1)
+  panel.abline(v=abs(min(forest.varimp)), col='red',
+               lty='longdash', lwd=2)
+}
+) 
+```
+
 ##Multinomial regression analysis
 
 ```{r Bayesian multinomial regression analysis, echo=TRUE, eval=TRUE}
@@ -193,8 +211,9 @@ install.packages ("nnet")
 library(nnet)
 ##modeling fitting
 
-##the default reference response is "V-chu-N-lai"
+##the default reference response is "V-chu-N-lai" -B 
 ##setting the reference level of categorical predictors using relevel() function
+PV_data$Response_recode<-relevel(PV_data$Response_recode, ref="B")
 PV_data$NP_Concreteness <- relevel(PV_data$NP_Concreteness, ref = "Non-concrete")
 PV_data$Imperative_conditional<-relevel(PV_data$Imperative_conditional, ref = "No")
 PV_data$le<-relevel(PV_data$le, ref="Absent")
@@ -203,7 +222,7 @@ PV_data$NP_Givenness<-relevel(PV_data$NP_Givenness, ref="New")
 PV_data$Structural_Priming<-relevel(PV_data$Structural_Priming, ref="No")
 PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Absent")
 multinom_model <- multinom( 
-  formula = Response ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
+  formula = Response_recode ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
 summary(multinom_model)
 
 ```
@@ -227,10 +246,10 @@ coef_table <- tidy(multinom_model) %>%
     p_value = 2 * (1 - pnorm(abs(z_value))) 
     ) %>% 
   select(y.level, term, estimate, std.error,z_value, p_value) 
-# Print a nice table 
+
 kable( 
   coef_table, 
-  digits = 4, caption = "Multinomial Regression Coefficients with Significance" 
+  digits = 4, caption = "Multinomial Regression Coefficients" 
   )
 ```
 
@@ -244,38 +263,90 @@ coef_mat<-coef(multinom_model)
 outcomes<-rownames(coef_mat)
 outcomes
 vc_mat<-vcov(multinom_model)
-## deriving the comparison of V-N-chulai (C) vs. V-chulai-N (B)
-coef_C_vs_B<-coef_mat[outcomes[2],]-coef_mat[outcomes[1],]
+## deriving the comparison of V-N-chulai (B) vs. V-chulai-N (C)
+coef_AC<-coef_mat[outcomes[1],]-coef_mat[outcomes[2],]
 ###computing std.errors for the third comparison
 ##### Helper function to extract block matrices from vcov 
 get_block <- function(vcov_matrix, outcome_name, coef_names) { 
   idx <- grep(paste0("^", outcome_name, ":"), rownames(vcov_matrix)) 
   vcov_matrix[idx, idx] 
   }
-####extract blocks for  V-N-chulai and V-chulai-N
-block_B <- get_block(vc_mat, outcomes[1], colnames(coef_mat)) 
+####extract blocks for  V-N-chulai(A) and V-chulai-N(B)
+block_A <- get_block(vc_mat, outcomes[1], colnames(coef_mat)) 
 block_C <- get_block(vc_mat, outcomes[2], colnames(coef_mat))
 ####extract cross-variance block
-idx_B <- grep(paste0("^", outcomes[1], ":"), rownames(vc_mat)) 
+idx_A <- grep(paste0("^", outcomes[1], ":"), rownames(vc_mat)) 
 idx_C <- grep(paste0("^", outcomes[2], ":"), rownames(vc_mat)) 
-block_CB <- vc_mat[idx_C, idx_B]
+block_AC <- vc_mat[idx_A, idx_C]
 ####variance of C-B
-var_C_vs_B <- block_C + block_B - 2 * block_CB 
-se_C_vs_B <- sqrt(diag(var_C_vs_B))
+var_AC <- block_A + block_C - 2 * block_AC 
+se_AC <- sqrt(diag(var_AC))
 ####z- and p-values
-z_C_vs_B <- coef_C_vs_B / se_C_vs_B 
-p_C_vs_B <- 2 * (1 - pnorm(abs(z_C_vs_B)))
+z_AC <- coef_AC / se_AC 
+p_AC <- 2 * (1 - pnorm(abs(z_AC)))
 ####results:
-results_C_vs_B <- data.frame( 
-  term = names(coef_C_vs_B), 
-  estimate = coef_C_vs_B, 
-  std.error = se_C_vs_B, 
-  z.value = z_C_vs_B, 
-  p.value = p_C_vs_B )
+results_AC <- data.frame( 
+  term = names(coef_AC),
+  estimate = coef_AC, 
+  std.error = se_AC, 
+  z.value = z_AC, 
+  p.value = p_AC )
 ####printing results
 kable( 
-  results_C_vs_B, 
+  results_AC, 
   digits = 4, 
-  caption = "Derived Binary Logit: V-N-chulai (C) vs. V-chulai-N (B)" )
+  caption = "Derived Binary Logit: V-N-chulai (A) vs. V-chulai-N (C)" )
+```
+
+### result presentation
+```{r extracting only coefficients with significant ones in bold, echo=TRUE, eval=TRUE}
+coefs <- summary(multinom_model)$coefficients 
+ses <- summary(multinom_model)$standard.errors 
+zvals <- coefs / ses 
+pvals <- 2 * (1 - pnorm(abs(zvals)))
+#function to bold the significant coefficients
+bold_sig <- function(beta, p, alpha = 0.05) {
+  ifelse(p < alpha,
+         paste0("**", round(beta, 3), "**"),
+         round(beta, 3))
+}
+
+table_AB <- data.frame(
+  term = colnames(coefs),
+  A_vs_B   = mapply(bold_sig, coefs["A", ], pvals["A", ])
+)
+
+table_CB <- data.frame(
+  term = colnames(coefs),
+  C_vs_B   = mapply(bold_sig, coefs["C", ], pvals["C", ])
+)
+
+results_AC$estimate_fmt <- ifelse(
+  results_AC$p.value < 0.05,
+  paste0("**", round(results_AC$estimate, 3), "**"),
+  round(results_AC$estimate, 3)
+)
+
+table_AC <- data.frame(
+  term = results_AC$term,
+  A_vs_C = results_AC$estimate_fmt
+)
+
+final_table <- Reduce(function(x, y) merge(x, y, by = "term"),
+                           list(table_AB, table_CB, table_AC))
+
+final_table
+
+library(knitr)
+library(kableExtra)
+
+final_table %>%
+  kable(escape = FALSE, 
+        caption = "Multinomial Regression Modeling") %>%
+  column_spec(1, width = "5cm") %>%   # term column
+  column_spec(2, width = "4cm") %>%   
+  column_spec(3, width = "4cm") %>%  
+  column_spec(4, width = "4cm")      
+
 ```
 
