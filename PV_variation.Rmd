@@ -48,6 +48,8 @@ PV_data$Response <- droplevels(PV_data$Response)
 #PV_data$NP_Givenness<-droplevels(PV_data$NP_Givenness)
 PV_data$NP_Concreteness<- droplevels(PV_data$NP_Concreteness)
 PV_data$NP_Definiteness<- droplevels(PV_data$NP_Definiteness)
+PV_data$NP_Givenness<- droplevels(PV_data$NP_Givenness)
+PV_data$Structural_Priming<-droplevels(PV_data$Structural_Priming)
 PV_data$Time<- droplevels(PV_data$Time)
 PV_data$Register<- droplevels(PV_data$Register)
 PV_data$Genre<- droplevels(PV_data$Genre)
@@ -66,6 +68,8 @@ PV_data$NP_Length<- as.numeric(PV_data$NP_Length)
 #PV_data$NP_Givenness<-as.factor(PV_data$NP_Givenness)
 PV_data$NP_Concreteness<- as.factor(PV_data$NP_Concreteness)
 PV_data$NP_Definiteness<- as.factor(PV_data$NP_Definiteness)
+PV_data$NP_Givenness<- as.factor(PV_data$NP_Givenness)
+PV_data$Structural_Priming<-as.factor(PV_data$Structural_Priming)
 PV_data$Time_num<- as.numeric(PV_data$Time_num)
 PV_data$Time<- as.factor(PV_data$Time)
 PV_data$Register<- as.factor(PV_data$Register)
@@ -92,9 +96,9 @@ piechart<-pie(response_counts,
 library(knitr)
 
 variables <- data.frame(
-    Variable = c("Response", "NP_Length", "NP_Concreteness", "NP_Definiteness", "Time_num", "Register", "Imperative_conditional", "le", "Numeric_Classifier"),
-    Type = c("response variable", "numeric", "categorical", "categorical", "numeric", "categorical", "categorical", "categorical", "categorical"),
-    Explanation = c("v_chu_n_lai vs. v_chulai_n vs. v_n_chulai", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite", "20-year intervals", "3 levels: Written, Spoken and Online", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
+    Variable = c("Response", "NP_Length", "NP_Concreteness", "NP_Definiteness","NP_Givenness","Structural_Priming", "Time_num", "Register", "Imperative_conditional", "le", "Numeric_Classifier"),
+    Type = c("response variable", "numeric", "categorical", "categorical","categorical","categorical", "numeric", "categorical", "categorical", "categorical", "categorical"),
+    Explanation = c("v_chu_n_lai vs. v_chulai_n vs. v_n_chulai", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite","New vs.Given","Yes vs.No", "20-year intervals", "3 levels: Written, Spoken and Online", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
 )
 
 # Render as a table
@@ -120,7 +124,7 @@ ggplot(PV_data, aes(x = Response, y = log_NP_Length)) +
 ```{r CRF model fitting, echo = TRUE, eval = TRUE, message=TRUE, warning=TRUE}
 PV_data$Response <- droplevels(PV_data$Response)
 set.seed(123) # esnures that we can reproduce results
-forest = cforest(Response ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
+forest = cforest(Response ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
 
 #### calculate variable importance ranking, takes some time
 forest.varimp = varimp(forest, conditional = FALSE) 
@@ -173,7 +177,7 @@ multiclass_auc
 
 ## plotting CRF
 
-```{r CRF plotting, fig.cap="Figure 5: Factor importance ranking" ,echo = TRUE, eval = TRUE, fig.width=4, fig.height=4}
+```{r CRF plotting, fig.cap="Figure 5: Factor importance ranking" ,echo = TRUE, eval = TRUE, fig.width=6 fig.height=4}
 dotplot(sort(forest.varimp), xlab="Variable Importance", panel = function(x,y){
   panel.dotplot(x, y, col='darkblue', pch=16, cex=1.1)
   panel.abline(v=abs(min(forest.varimp)), col='red',
@@ -195,9 +199,11 @@ PV_data$NP_Concreteness <- relevel(PV_data$NP_Concreteness, ref = "Non-concrete"
 PV_data$Imperative_conditional<-relevel(PV_data$Imperative_conditional, ref = "No")
 PV_data$le<-relevel(PV_data$le, ref="Absent")
 PV_data$NP_Definiteness<-relevel(PV_data$NP_Definiteness, ref="Indefinite")
+PV_data$NP_Givenness<-relevel(PV_data$NP_Givenness, ref="New")
+PV_data$Structural_Priming<-relevel(PV_data$Structural_Priming, ref="No")
 PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Absent")
 multinom_model <- multinom( 
-  formula = Response ~ Time_num + Genre + log_NP_Length + NP_Concreteness + NP_Definiteness + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
+  formula = Response ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
 summary(multinom_model)
 
 ```
