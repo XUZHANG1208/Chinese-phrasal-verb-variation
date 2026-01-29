@@ -17,28 +17,31 @@ library(gt)
 library(dplyr)
 library(ggplot2)
 library(car)         # to calculate VIFs
-library(Hmisc)       # to calculate C values
 library(party)       # for ctrees and CRF
 #install.packages("lattice")
 library(lattice)
-library(lme4)        # for mixed-effects regression
 library(MuMIn)       # for PSeudo R2 measures
 library(effects)     # for partial effects plot
 library(report)      # for description of various objects
 library(parameters)  # to examine model effects
 library(performance) # to assess and compare model performance
-#install.packages("broom.mixed") #for plotting 
-#install.packages("gt")
-library(knitr)
-#install.packages("gmodels")
-library(gmodels)
 ```
 
 
 ```{r setup, echo=FALSE, eval=TRUE}
-PV<-read.csv("merged_out.csv", sep=";", stringsAsFactors=TRUE)
+PV<-read.csv("merged_out2.csv", sep=";", stringsAsFactors=TRUE)
 PV_dis <- distinct(PV, Text, .keep_all = TRUE) # removing duplicates
 PV_data<- PV_dis[rowSums(is.na(PV_dis) | PV_dis == "") < ncol(PV_dis), ] # removing NA/empty observations
+summary(PV_data)
+```
+
+```{r converting response to A B C, echo=TRUE, eval=TRUE}
+PV_data$Response_recode<-factor(
+  PV_data$Response,
+  levels=c("V-N-chulai", "V-chu-N-lai", "V-chulai-N"), # A,B,C are sequenced according to the position of the NP object
+  labels=c("A","B", "C")
+)
+
 summary(PV_data)
 ```
 
@@ -64,6 +67,7 @@ summary(PV_data)
 ```{r data_overview, fig.cap="Figure 1: data overview", echo=TRUE, eval=TRUE, message=FALSO, warning=FALSE}
 library(base)
 PV_data$Response<-as.factor(PV_data$Response)
+PV_data$Response_recode<-as.factor(PV_data$Response_recode)
 PV_data$NP_Length<- as.numeric(PV_data$NP_Length)
 #PV_data$Structural_priming<-as.factor(PV_data$Structural_priming)
 #PV_data$NP_Givenness<-as.factor(PV_data$NP_Givenness)
@@ -79,31 +83,25 @@ PV_data$Imperative_conditional<- as.factor(PV_data$Imperative_conditional)
 PV_data$le<- as.factor(PV_data$le)
 PV_data$Numeric_Classifier<- as.factor(PV_data$Numeric_Classifier)
 
+##converting fiction-translation to fiction
+levels(PV_data$Genre)[levels(PV_data$Genre) == "Fiction_t"] <- "Fiction"
+
 #the frequency of responses
-response_counts <- table(PV_data$Response)
+response_counts <- table(PV_data$Response_recode)
 piechart<-pie(response_counts, 
-    main = "Response Distribution", 
+    main = "Figure 1: The Distribution of three CDC variants", 
     col = rainbow(length(response_counts)), 
     labels = paste(names(response_counts), response_counts, sep=": ")) 
 ```
 
-## converting responses to A, B and C types
-```{r converting response to types, echo=FALSE, eval=FALSE}
-PV_data$Response_recode<-factor(
-  PV_data$Response,
-  levels=c("V-N-chulai", "V-chu-N-lai", "V-chulai-N"), # A,B,C are sequenced according to the position of the NP object
-  labels=c("A","B", "C")
-)
-```
-
-## Variables
+## Data annotation
 ```{r variables, echo=TRUE, eval=TRUE}
 library(knitr)
 
 variables <- data.frame(
-    Variable = c("Response", "NP_Length", "NP_Concreteness", "NP_Definiteness","NP_Givenness","Structural_Priming", "Time_num", "Register", "Imperative_conditional", "le", "Numeric_Classifier"),
+    Variable = c("Response_recode", "NP_Length", "NP_Concreteness", "NP_Definiteness","NP_Givenness","Structural_Priming", "Time_num", "Genre", "Imperative_conditional", "le", "Numeric_Classifier"),
     Type = c("response variable", "numeric", "categorical", "categorical","categorical","categorical", "numeric", "categorical", "categorical", "categorical", "categorical"),
-    Explanation = c("v_chu_n_lai vs. v_chulai_n vs. v_n_chulai", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite","New vs.Given","Yes vs.No", "20-year intervals", "3 levels: Written, Spoken and Online", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
+    Explanation = c("A (v_n_chulai) vs. B (v_chu_n_lai) vs. C (v_chulai_n)", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite","New vs.Given","Yes vs.No", "20-year intervals", "8 levels: academic, biography, conversation, fiction, magazine, newspaper, online and TV/movie", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
 )
 
 # Render as a table
@@ -114,7 +112,7 @@ kable(variables, caption = "Table 1: Data Annotation")
 ```{r NP_Length Distribution, fig.cap="Figure 2: NP_Length vs. Responses', echo=TRUE, eval=TRUE, fig.width=6, fig.height=4}
 PV_data$log_NP_Length <- log(PV_data$NP_Length) 
 
-ggplot(PV_data, aes(x = Response, y = log_NP_Length)) +
+ggplot(PV_data, aes(x = Response_recode, y = log_NP_Length)) +
   geom_boxplot(fill = "lightblue", color = "black") +
   stat_summary(fun = mean, geom = "point", shape = 18, color = "red", size = 3) +  # Mean (Red Diamond)
   stat_summary(fun = median, geom = "point", shape = 8, color = "blue", size = 3) +  # Median (Blue Star)
@@ -127,9 +125,8 @@ ggplot(PV_data, aes(x = Response, y = log_NP_Length)) +
 #Results
 ##Conditional Random Forest(CRF)
 ```{r CRF model fitting, echo = TRUE, eval = TRUE, message=TRUE, warning=TRUE}
-PV_data$Response <- droplevels(PV_data$Response)
 set.seed(123) # esnures that we can reproduce results
-forest = cforest(Response ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
+forest = cforest(Response ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness + NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
 
 #### calculate variable importance ranking, takes some time
 forest.varimp = varimp(forest, conditional = FALSE) 
@@ -137,12 +134,13 @@ forest.varimp = varimp(forest, conditional = FALSE)
 #### since Somers'D only works with binary responses,so we use ROC curve (see Hand&Till 2001) to replace C-value. The multiclass AUC is the average of all pairwise AUC.
 ##get predicted probabilities for all response classes
 probs<-do.call(rbind, treeresponse(forest) )
-##making sure responses are factors
-y<-PV_data$Response
-y<-factor(y)
+
 ##computing multiclass AUC using pROC
 install.packages("pROC")
 library(pROC) 
+
+y<-PV_data$Response
+y<-factor(y)
 ##before assessing AUC, we need to correct the name of porbs matrix to prevent mismatch. CRF tends to rename responses
 colnames(probs) <- levels(y)
 ## now calculating pairwise ROC
@@ -204,6 +202,10 @@ dotplot(sort(imp_others), xlab="Variable Importance (without NP_length)", panel 
 ) 
 ```
 
+remarks on CRF:
+It is sensitive to response labeling!!!
+When i model with response_recode (i.e., A B C), instead of the original responses (v_n_chulai, etc.) the factor importance change and the mean AUC drops slightly. This is due to the fact that CRF is sensitive to the order of response levels, and hence the changed probabilities it assigns to responses. 
+
 ##Multinomial regression analysis
 
 ```{r Bayesian multinomial regression analysis, echo=TRUE, eval=TRUE}
@@ -222,7 +224,7 @@ PV_data$NP_Givenness<-relevel(PV_data$NP_Givenness, ref="New")
 PV_data$Structural_Priming<-relevel(PV_data$Structural_Priming, ref="No")
 PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Absent")
 multinom_model <- multinom( 
-  formula = Response_recode ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le + Numeric_Classifier, data = PV_data)
+  formula = Response_recode ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le:Numeric_Classifier, data = PV_data)
 summary(multinom_model)
 
 ```
@@ -233,7 +235,7 @@ pR2(multinom_model)
 
 ## multiclass AUC
 library(pROC) 
-multiclass.roc(PV_data$Response, predict(multinom_model, type="prob"))
+multiclass.roc(PV_data$Response_recode, predict(multinom_model, type="prob"))
 ```
 ```{r coefficients, echo=TRUE, eval=TRUE}
 ##extract tidy coefficients
