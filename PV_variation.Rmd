@@ -88,10 +88,13 @@ levels(PV_data$Genre)[levels(PV_data$Genre) == "Fiction_t"] <- "Fiction"
 
 #the frequency of responses
 response_counts <- table(PV_data$Response_recode)
-piechart<-pie(response_counts, 
-    main = "Figure 1: The Distribution of three CDC variants", 
-    col = rainbow(length(response_counts)), 
-    labels = paste(names(response_counts), response_counts, sep=": ")) 
+barplot(
+  response_counts,
+  main = "Figure 1: The Distribution of three CDC variants",
+  col = rainbow(length(response_counts)),
+  names.arg = paste(names(response_counts), response_counts, sep=": ")
+)
+
 ```
 
 ## Data annotation
@@ -237,6 +240,40 @@ pR2(multinom_model)
 library(pROC) 
 multiclass.roc(PV_data$Response_recode, predict(multinom_model, type="prob"))
 ```
+## Anoter way to model evaluation
+```{r c-values, echo=TRUE, eval=TRUE}
+
+# Convert probabilities to log-odds for each non-baseline category
+probs <- predict(multinom_model, type = "probs")
+
+library(pROC)
+
+# Identify the reference category
+ref <- levels(PV_data$Response_recode)[1]   # should be "B" in your setup
+
+# List of non-reference categories
+cats <- setdiff(levels(PV_data$Response_recode), ref)
+
+# Compute C-values for each internal logit
+C_values <- sapply(cats, function(cat) {
+  # Binary outcome: 1 = cat, 0 = ref
+  y_bin <- ifelse(PV_data$Response_recode == cat, 1,
+                  ifelse(PV_data$Response_recode == ref, 0, NA))
+
+  # Remove rows belonging to other categories
+  keep <- !is.na(y_bin)
+
+  roc_obj <- roc(y_bin[keep], probs[keep, cat])
+  auc(roc_obj)
+})
+
+C_values
+
+
+
+```
+
+
 ```{r coefficients, echo=TRUE, eval=TRUE}
 ##extract tidy coefficients
 library(broom) 
@@ -299,6 +336,26 @@ kable(
   digits = 4, 
   caption = "Derived Binary Logit: V-N-chulai (A) vs. V-chulai-N (C)" )
 ```
+### C-value of model (A vs. C)
+```{r evaluation of the third model, echo=TRUE, eval=TRUE}
+
+# Extract only A and C cases
+AC_data <- subset(PV_data, Response_recode %in% c("A", "C"))
+
+# Binary outcome: 1 = A, 0 = C
+y_AC <- ifelse(AC_data$Response_recode == "A", 1, 0)
+
+# Predicted probability of A for those same rows
+p_AC <- probs[PV_data$Response_recode %in% c("A", "C"), "A"]
+
+# Compute ROC and AUC
+roc_AC <- roc(y_AC, p_AC)
+auc_AC <- auc(roc_AC)
+
+auc_AC
+
+```
+
 
 ### result presentation
 ```{r extracting only coefficients with significant ones in bold, echo=TRUE, eval=TRUE}
