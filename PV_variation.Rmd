@@ -149,15 +149,7 @@ multinom_model <- multinom(
 summary(multinom_model)
 
 ```
-```{r model assessment, echo=TRUE, eval=TRUE}
-##overall model fitting
-library(pscl) 
-pR2(multinom_model)
 
-## multiclass AUC
-library(pROC) 
-multiclass.roc(PV_data$Response_recode, predict(multinom_model, type="prob"))
-```
 ## Anoter way to model evaluation
 ```{r c-values, echo=TRUE, eval=TRUE}
 
