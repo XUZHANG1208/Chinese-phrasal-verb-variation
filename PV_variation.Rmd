@@ -143,9 +143,9 @@ PV_data$le<-relevel(PV_data$le, ref="Absent")
 PV_data$NP_Definiteness<-relevel(PV_data$NP_Definiteness, ref="Indefinite")
 PV_data$NP_Givenness<-relevel(PV_data$NP_Givenness, ref="New")
 PV_data$Structural_Priming<-relevel(PV_data$Structural_Priming, ref="No")
-PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Absent")
+PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Present")
 multinom_model <- multinom( 
-  formula = Response_recode ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + le:Numeric_Classifier, data = PV_data)
+  formula = Response_recode ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + Numeric_Classifier, data = PV_data)
 summary(multinom_model)
 
 ```
@@ -274,31 +274,32 @@ ses <- summary(multinom_model)$standard.errors
 zvals <- coefs / ses 
 pvals <- 2 * (1 - pnorm(abs(zvals)))
 #function to bold the significant coefficients
-bold_sig <- function(beta, p, alpha = 0.05) {
-  ifelse(p < alpha,
-         paste0("**", round(beta, 3), "**"),
-         round(beta, 3))
+fmt <- function(beta, p) {
+  ifelse(p < .05,
+         sprintf("%.3f (p = %.3f)*", beta, p),
+         sprintf("%.3f (p = %.3f)", beta, p))
 }
+
 
 table_AB <- data.frame(
   term = colnames(coefs),
-  A_vs_B   = mapply(bold_sig, coefs["A", ], pvals["A", ])
+  A_vs_B = fmt(coefs["A", ], pvals["A", ])
 )
 
 table_CB <- data.frame(
   term = colnames(coefs),
-  C_vs_B   = mapply(bold_sig, coefs["C", ], pvals["C", ])
+  C_vs_B = fmt(coefs["C", ], pvals["C", ])
 )
 
-results_AC$estimate_fmt <- ifelse(
-  results_AC$p.value < 0.05,
-  paste0("**", round(results_AC$estimate, 3), "**"),
-  round(results_AC$estimate, 3)
-)
+##results_AC$estimate_fmt <- ifelse(
+  ##results_AC$p.value < 0.05,
+ ## paste0("**", round(results_AC$estimate, 3), "**"),
+ ## round(results_AC$estimate, 3)
+##)
 
 table_AC <- data.frame(
   term = results_AC$term,
-  A_vs_C = results_AC$estimate_fmt
+  A_vs_C = fmt(results_AC$estimate, results_AC$p.value)
 )
 
 final_table <- Reduce(function(x, y) merge(x, y, by = "term"),
@@ -310,12 +311,13 @@ library(knitr)
 library(kableExtra)
 
 final_table %>%
-  kable(escape = FALSE, 
+  kable(escape = FALSE,
         caption = "Multinomial Regression Modeling") %>%
-  column_spec(1, width = "5cm") %>%   # term column
-  column_spec(2, width = "4cm") %>%   
-  column_spec(3, width = "4cm") %>%  
-  column_spec(4, width = "4cm")      
+  column_spec(1, width = "5cm") %>%
+  column_spec(2, width = "4cm") %>%
+  column_spec(3, width = "4cm") %>%
+  column_spec(4, width = "4cm")
+
 
 ```
 
@@ -331,5 +333,12 @@ plot(eff_conc)
 ```{r ploting definiteness, echo=TRUE, eval=TRUE}
 eff_conc <- Effect("NP_Definiteness", multinom_model)
 plot(eff_conc)
+```
+##plotiting numeric classifiers
+```{r ploting numeric classifiers, echo=TRUE, eval=TRUE}
+eff_conc <- Effect("Numeric_Classifier", multinom_model)
+plot(eff_conc)
+```
+
 ```
 
