@@ -159,7 +159,7 @@ probs <- predict(multinom_model, type = "probs")
 library(pROC)
 
 # Identify the reference category
-ref <- levels(PV_data$Response_recode)[1]   # should be "B" in your setup
+ref <- levels(PV_data$Response_recode)[1]   # should be "B" in the setup
 
 # List of non-reference categories
 cats <- setdiff(levels(PV_data$Response_recode), ref)
