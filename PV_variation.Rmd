@@ -10,7 +10,7 @@ date: "2026-01-12"
 ---
 # Introduction
 
-```{r loading packages, echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE }
+```{r loading_packages, echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE }
 
 library(broom.mixed)
 library(gt)
@@ -29,13 +29,13 @@ library(performance) # to assess and compare model performance
 
 
 ```{r setup, echo=FALSE, eval=TRUE}
-PV<-read.csv("merged_out2.csv", sep=";", stringsAsFactors=TRUE)
+PV<-read.csv("merged_out.csv", sep=";", stringsAsFactors=TRUE)
 PV_dis <- distinct(PV, Text, .keep_all = TRUE) # removing duplicates
 PV_data<- PV_dis[rowSums(is.na(PV_dis) | PV_dis == "") < ncol(PV_dis), ] # removing NA/empty observations
 summary(PV_data)
 ```
 
-```{r converting response to A B C, echo=TRUE, eval=TRUE}
+```{r converting_response, echo=TRUE, eval=TRUE}
 PV_data$Response_recode<-factor(
   PV_data$Response,
   levels=c("V-N-chulai", "V-chu-N-lai", "V-chulai-N"), # A,B,C are sequenced according to the position of the NP object
@@ -46,7 +46,7 @@ summary(PV_data)
 ```
 
 ##dropping unwanted levels
-```{r dropping level, echo=FALSE, eval=FALSE}
+```{r dropping_level, echo=FALSE, eval=FALSE}
 PV_data$Response <- droplevels(PV_data$Response)
 #PV_data$Structural_priming<-droplevels(PV_data$Structural_priming)
 #PV_data$NP_Givenness<-droplevels(PV_data$NP_Givenness)
@@ -64,7 +64,7 @@ summary(PV_data)
 ```
 
 ##data overview
-```{r data_overview, fig.cap="Figure 1: data overview", echo=TRUE, eval=TRUE, message=FALSO, warning=FALSE}
+```{r data_overview, fig.cap="Figure 1: data overview", echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE}
 library(base)
 PV_data$Response<-as.factor(PV_data$Response)
 PV_data$Response_recode<-as.factor(PV_data$Response_recode)
@@ -76,15 +76,23 @@ PV_data$NP_Definiteness<- as.factor(PV_data$NP_Definiteness)
 PV_data$NP_Givenness<- as.factor(PV_data$NP_Givenness)
 PV_data$Structural_Priming<-as.factor(PV_data$Structural_Priming)
 PV_data$Time_num<- as.numeric(PV_data$Time_num)
-PV_data$Time<- as.factor(PV_data$Time)
+#PV_data$Time<- as.factor(PV_data$Time)
 PV_data$Register<- as.factor(PV_data$Register)
-PV_data$Genre<- as.factor(PV_data$Genre)
 PV_data$Imperative_conditional<- as.factor(PV_data$Imperative_conditional)
 PV_data$le<- as.factor(PV_data$le)
 PV_data$Numeric_Classifier<- as.factor(PV_data$Numeric_Classifier)
 
 ##converting fiction-translation to fiction
 levels(PV_data$Genre)[levels(PV_data$Genre) == "Fiction_t"] <- "Fiction"
+
+## merge genres with seperation risks
+PV_data$Genre2 <- as.character(PV_data$Genre)
+
+PV_data$Genre2[PV_data$Genre %in% c("Biography", "Magazine", "Newspaper")] <- "Journalistic"
+
+PV_data$Genre2 <- factor(PV_data$Genre2)
+
+
 
 #the frequency of responses
 response_counts <- table(PV_data$Response_recode)
@@ -102,9 +110,9 @@ barplot(
 library(knitr)
 
 variables <- data.frame(
-    Variable = c("Response_recode", "NP_Length", "NP_Concreteness", "NP_Definiteness","NP_Givenness","Structural_Priming", "Time_num", "Genre", "Imperative_conditional", "le", "Numeric_Classifier"),
-    Type = c("response variable", "numeric", "categorical", "categorical","categorical","categorical", "numeric", "categorical", "categorical", "categorical", "categorical"),
-    Explanation = c("A (v_n_chulai) vs. B (v_chu_n_lai) vs. C (v_chulai_n)", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite","New vs.Given","Yes vs.No", "20-year intervals", "8 levels: academic, biography, conversation, fiction, magazine, newspaper, online and TV/movie", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
+    Variable = c("Response_recode", "NP_Length", "NP_Concreteness", "NP_Definiteness","NP_Givenness","Structural_Priming", "Genre2", "Imperative_conditional", "le", "Numeric_Classifier"),
+    Type = c("response variable", "numeric", "categorical", "categorical","categorical","categorical", "categorical", "categorical", "categorical", "categorical"),
+    Explanation = c("A (v_n_chulai) vs. B (v_chu_n_lai) vs. C (v_chulai_n)", "Object NP length - character numbers ", "Concrete vs. Non-concrete", "Definite vs. Indefinite","New vs.Given","Yes vs.No", "6 levels: academic, conversation, fiction, Journalistic, online and TV/movie", "Yes vs. No", "Absent vs. Present", "Absent vs. Present")
 )
 
 # Render as a table
@@ -112,7 +120,7 @@ kable(variables, caption = "Table 1: Data Annotation")
 ```
 
 ## Plotting NP_Length vs. Responses
-```{r NP_Length Distribution, fig.cap="Figure 2: NP_Length vs. Responses', echo=TRUE, eval=TRUE, fig.width=6, fig.height=4}
+```{r NP_Length_Distribution, echo=TRUE, eval=TRUE, fig.width=6, fig.height=4}
 PV_data$log_NP_Length <- log(PV_data$NP_Length) 
 
 ggplot(PV_data, aes(x = Response_recode, y = log_NP_Length)) +
@@ -129,10 +137,7 @@ ggplot(PV_data, aes(x = Response_recode, y = log_NP_Length)) +
 
 ##Multinomial regression analysis
 
-```{r Bayesian multinomial regression analysis, echo=TRUE, eval=TRUE}
-install.packages ("nnet")
-library(nnet)
-##modeling fitting
+```{r model_fitting, echo=TRUE, eval=TRUE}
 
 ##the default reference response is "V-chu-N-lai" -B 
 ##setting the reference level of categorical predictors using relevel() function
@@ -143,34 +148,58 @@ PV_data$le<-relevel(PV_data$le, ref="Absent")
 PV_data$NP_Definiteness<-relevel(PV_data$NP_Definiteness, ref="Indefinite")
 PV_data$NP_Givenness<-relevel(PV_data$NP_Givenness, ref="New")
 PV_data$Structural_Priming<-relevel(PV_data$Structural_Priming, ref="No")
-PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Present")
-multinom_model <- multinom( 
-  formula = Response_recode ~ Time_num + log_NP_Length +NP_Concreteness + NP_Definiteness +NP_Givenness +Structural_Priming + Genre + Imperative_conditional + Numeric_Classifier, data = PV_data)
-summary(multinom_model)
+PV_data$Numeric_Classifier<-relevel(PV_data$Numeric_Classifier, ref="Absent")
+
+# Model fitting
+
+library(nnet)
+
+multinom_model <- multinom(
+  Response_recode ~ log_NP_Length + NP_Concreteness +
+    NP_Definiteness + NP_Givenness + Structural_Priming + Genre2 +
+    Imperative_conditional + le + Numeric_Classifier + Time_num,
+  data = PV_data
+)
+
+multinom_model
 
 ```
 
-## Anoter way to model evaluation
+## Check seperation
+```{r seperation_checking, echo = TRUE, eval = TRUE}
+s <- summary(multinom_model)
+coefs <- s$coefficients
+ses   <- s$standard.errors
+
+# Look for extreme values
+apply(abs(coefs), 2, max)
+apply(abs(ses), 2, max)
+
+```
+
+
+## Another way to model evaluation
 ```{r c-values, echo=TRUE, eval=TRUE}
 
 # Convert probabilities to log-odds for each non-baseline category
+model_data <- model.frame(multinom_model)
 probs <- predict(multinom_model, type = "probs")
+
 
 library(pROC)
 
 # Identify the reference category
-ref <- levels(PV_data$Response_recode)[1]   # should be "B" in the setup
+ref <- levels(model_data$Response_recode)[1]   # should be "B" in the setup
 
 # List of non-reference categories
-cats <- setdiff(levels(PV_data$Response_recode), ref)
+cats <- setdiff(levels(model_data$Response_recode), ref)
 
 # Compute C-values for each internal logit
 C_values <- sapply(cats, function(cat) {
-  # Binary outcome: 1 = cat, 0 = ref
-  y_bin <- ifelse(PV_data$Response_recode == cat, 1,
-                  ifelse(PV_data$Response_recode == ref, 0, NA))
 
-  # Remove rows belonging to other categories
+  y_bin <- ifelse(model_data$Response_recode == cat, 1,
+                  ifelse(model_data$Response_recode == ref, 0, NA))
+
   keep <- !is.na(y_bin)
 
   roc_obj <- roc(y_bin[keep], probs[keep, cat])
@@ -203,7 +232,7 @@ kable(
 ```
 
 ##deriving V-chulai-N vs. V-N-chulai logit
-```{r coefficnets of the third regression, echo=FALSE, eval=FALSE}
+```{r coefficnets_of_AC, echo=TRUE, eval=TRUE}
 library(dplyr) 
 library(knitr)
 ## extracting coefficients and variance-covariance matrices
@@ -247,16 +276,16 @@ kable(
   caption = "Derived Binary Logit: V-N-chulai (A) vs. V-chulai-N (C)" )
 ```
 ### C-value of model (A vs. C)
-```{r evaluation of the third model, echo=TRUE, eval=TRUE}
+```{r eval_the_third_model, echo=TRUE, eval=TRUE}
 
 # Extract only A and C cases
-AC_data <- subset(PV_data, Response_recode %in% c("A", "C"))
+AC_data <- subset(model_data, Response_recode %in% c("A", "C"))
 
 # Binary outcome: 1 = A, 0 = C
 y_AC <- ifelse(AC_data$Response_recode == "A", 1, 0)
 
 # Predicted probability of A for those same rows
-p_AC <- probs[PV_data$Response_recode %in% c("A", "C"), "A"]
+p_AC <- probs[model_data$Response_recode %in% c("A", "C"), "A"]
 
 # Compute ROC and AUC
 roc_AC <- roc(y_AC, p_AC)
@@ -268,16 +297,18 @@ auc_AC
 
 
 ### result presentation
-```{r extracting only coefficients with significant ones in bold, echo=TRUE, eval=TRUE}
+```{r extracting_only_coefficients, echo=TRUE, eval=TRUE}
 coefs <- summary(multinom_model)$coefficients 
 ses <- summary(multinom_model)$standard.errors 
 zvals <- coefs / ses 
 pvals <- 2 * (1 - pnorm(abs(zvals)))
 #function to bold the significant coefficients
 fmt <- function(beta, p) {
-  ifelse(p < .05,
-         sprintf("%.3f (p = %.3f)*", beta, p),
-         sprintf("%.3f (p = %.3f)", beta, p))
+  stars <- ifelse(p < 0.001, "***",
+           ifelse(p < 0.01,  "**",
+           ifelse(p < 0.05,  "*", "")))
+
+  sprintf("%.3f (p = %.3f)%s", beta, p, stars)
 }
 
 
@@ -305,7 +336,6 @@ table_AC <- data.frame(
 final_table <- Reduce(function(x, y) merge(x, y, by = "term"),
                            list(table_AB, table_CB, table_AC))
 
-final_table
 
 library(knitr)
 library(kableExtra)
@@ -322,23 +352,19 @@ final_table %>%
 ```
 
 ### ploting effects
-```{r ploting length effect, echo=TRUE, eval=TRUE}
-install.packages("effects")
+```{r ploting_length_effect, echo=TRUE, eval=TRUE}
+#install.packages("effects")
 library(effects)
 eff_conc <- Effect("log_NP_Length", multinom_model)
 plot(eff_conc)
 
 ```
-###ploting interaction
-```{r ploting definiteness, echo=TRUE, eval=TRUE}
-eff_conc <- Effect("NP_Definiteness", multinom_model)
-plot(eff_conc)
-```
+
 ##plotiting numeric classifiers
-```{r ploting numeric classifiers, echo=TRUE, eval=TRUE}
+```{r ploting_numeric_classifiers, echo=TRUE, eval=TRUE}
 eff_conc <- Effect("Numeric_Classifier", multinom_model)
 plot(eff_conc)
 ```
 
-```
+
 
